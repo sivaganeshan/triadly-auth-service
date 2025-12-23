@@ -67,6 +67,8 @@ After deployment, test each endpoint:
 
 ## Monitoring
 
+### Viewing Logs
+
 View logs:
 ```bash
 npm run logs
@@ -75,7 +77,61 @@ npm run logs
 Or for specific function:
 ```bash
 npm run logs:signin
+npm run logs:signup
+npm run logs:oauth
+npm run logs:callback
+npm run logs:signout
+npm run logs:session
 ```
+
+### Observability Features
+
+All functions include comprehensive observability:
+
+- **Structured Logging**: JSON-formatted logs with request IDs, timestamps, and metadata
+- **Performance Metrics**: Execution time tracking for functions and individual operations
+- **Error Tracking**: Full error context including stack traces and request details
+- **Request Correlation**: Unique request IDs for tracing requests across logs
+
+### Log Format
+
+Logs are structured as JSON with the following fields:
+- `level`: Log level (info, warn, error)
+- `timestamp`: ISO 8601 timestamp
+- `requestId`: Unique request identifier (UUID)
+- `functionName`: Name of the edge function
+- `message`: Log message
+- `duration`: Execution time in milliseconds
+- `method`: HTTP method
+- `path`: Request path
+- Additional metadata specific to the operation
+
+### Error Responses
+
+Error responses include a `requestId` field that can be used to correlate errors with log entries:
+
+```json
+{
+  "error": "Authentication failed",
+  "requestId": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+Use the request ID to search logs and find all related entries for debugging.
+
+### Performance Monitoring
+
+Monitor function performance by checking:
+- `duration` field in log entries (total function execution time)
+- Operation-specific durations in metadata (e.g., `operationDuration`)
+- Look for operations with unusually long durations
+
+### Best Practices
+
+1. **Monitor Error Rates**: Track error-level logs to identify issues
+2. **Performance Baselines**: Establish baseline durations for normal operations
+3. **Request Correlation**: Use request IDs to trace user journeys
+4. **Alert on Errors**: Set up alerts for error-level logs in production
 
 ## Troubleshooting
 

@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { signJWT } from "../_shared/jwt.ts";
+import { createLogger } from "../_shared/observability.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -13,12 +15,18 @@ serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
+  const logger = createLogger("auth-signin", req);
+
   try {
     const { email, password } = await req.json();
 
     if (!email || !password) {
+      logger.logWarn("Missing email or password in request");
       return new Response(
-        JSON.stringify({ error: "Email and password are required" }),
+        JSON.stringify({ 
+          error: "Email and password are required",
+          requestId: logger.requestId,
+        }),
         {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -38,15 +46,24 @@ serve(async (req) => {
     });
 
     // Authenticate user
-    const { data: authData, error: authError } =
-      await supabaseAdmin.auth.signInWithPassword({
+    const { data: authData, error: authError } = await logger.withTiming(
+      () => supabaseAdmin.auth.signInWithPassword({
         email,
         password,
-      });
+      }),
+      "signInWithPassword"
+    );
 
     if (authError || !authData.session) {
+      logger.logError(authError || new Error("Authentication failed"), {
+        email,
+        authErrorCode: authError?.status,
+      });
       return new Response(
-        JSON.stringify({ error: authError?.message || "Authentication failed" }),
+        JSON.stringify({ 
+          error: authError?.message || "Authentication failed",
+          requestId: logger.requestId,
+        }),
         {
           status: 401,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -56,9 +73,43 @@ serve(async (req) => {
 
     const { access_token, refresh_token, expires_in } = authData.session;
 
-    // Create httpOnly cookie with session token
+    // Fetch user subscription
+    const { data: subscription, error: subError } = await logger.withTiming(
+      () => supabaseAdmin
+        .from("subscriptions")
+        .select("tier, expires_at")
+        .eq("user_id", authData.user.id)
+        .single(),
+      "fetchSubscription"
+    );
+
+    if (subError) {
+      logger.logWarn("Failed to fetch subscription, using default", {
+        userId: authData.user.id,
+        error: subError.message,
+      });
+    }
+
+    // Default to 'free' if subscription doesn't exist
+    const tier = (subscription?.tier || "free") as "free" | "plus" | "pro";
+    const expiresAt = subscription?.expires_at 
+      ? Math.floor(new Date(subscription.expires_at).getTime() / 1000)
+      : undefined;
+
+    // Create custom JWT with subscription info
+    const customToken = await logger.withTiming(
+      () => signJWT({
+        sub: authData.user.id,
+        email: authData.user.email,
+        tier,
+        expires_at: expiresAt,
+      }, expires_in || 3600),
+      "signJWT"
+    );
+
+    // Create httpOnly cookie with custom JWT token
     const cookieOptions = [
-      `sb-access-token=${access_token}`,
+      `sb-access-token=${customToken}`,
       "HttpOnly",
       "SameSite=Lax",
       "Path=/",
@@ -87,6 +138,11 @@ serve(async (req) => {
 
     const refreshCookieHeader = refreshCookieOptions.join("; ");
 
+    logger.logInfo("Sign in successful", {
+      userId: authData.user.id,
+      tier,
+    });
+
     // Return user data (without sensitive tokens)
     return new Response(
       JSON.stringify({
@@ -94,6 +150,7 @@ serve(async (req) => {
           id: authData.user.id,
           email: authData.user.email,
           created_at: authData.user.created_at,
+          tier,
         },
       }),
       {
@@ -106,9 +163,13 @@ serve(async (req) => {
       }
     );
   } catch (error) {
+    logger.logError(error, {
+      operation: "auth-signin",
+    });
     return new Response(
       JSON.stringify({
         error: error instanceof Error ? error.message : "Internal server error",
+        requestId: logger.requestId,
       }),
       {
         status: 500,

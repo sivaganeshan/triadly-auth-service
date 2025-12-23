@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { encode } from "https://deno.land/std@0.168.0/encoding/base64url.ts";
+import { createLogger } from "../_shared/observability.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -27,14 +28,20 @@ serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
+  const logger = createLogger("auth-oauth", req);
+
   try {
     const url = new URL(req.url);
     const provider = url.searchParams.get("provider") || "google";
     const redirectTo = url.searchParams.get("redirect_to") || Deno.env.get("FRONTEND_URL") || "";
 
     if (!redirectTo) {
+      logger.logWarn("Missing redirect_to parameter");
       return new Response(
-        JSON.stringify({ error: "redirect_to parameter is required" }),
+        JSON.stringify({ 
+          error: "redirect_to parameter is required",
+          requestId: logger.requestId,
+        }),
         {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -69,26 +76,40 @@ serve(async (req) => {
     }
 
     // Initiate OAuth flow
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: provider as any,
-      options: {
-        redirectTo: `${Deno.env.get("SUPABASE_FUNCTIONS_URL")}/auth-callback?redirect_to=${encodeURIComponent(redirectTo)}`,
-        queryParams: {
-          code_challenge: codeChallenge,
-          code_challenge_method: codeChallengeMethod,
+    const { data, error } = await logger.withTiming(
+      () => supabase.auth.signInWithOAuth({
+        provider: provider as any,
+        options: {
+          redirectTo: `${Deno.env.get("SUPABASE_FUNCTIONS_URL")}/auth-callback?redirect_to=${encodeURIComponent(redirectTo)}`,
+          queryParams: {
+            code_challenge: codeChallenge,
+            code_challenge_method: codeChallengeMethod,
+          },
         },
-      },
-    });
+      }),
+      "signInWithOAuth"
+    );
 
     if (error) {
+      logger.logError(error, {
+        provider,
+        redirectTo,
+      });
       return new Response(
-        JSON.stringify({ error: error.message }),
+        JSON.stringify({ 
+          error: error.message,
+          requestId: logger.requestId,
+        }),
         {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         }
       );
     }
+
+    logger.logInfo("OAuth flow initiated", {
+      provider,
+    });
 
     // Return OAuth URL with cookie set
     return new Response(
@@ -103,9 +124,13 @@ serve(async (req) => {
       }
     );
   } catch (error) {
+    logger.logError(error, {
+      operation: "auth-oauth",
+    });
     return new Response(
       JSON.stringify({
         error: error instanceof Error ? error.message : "Internal server error",
+        requestId: logger.requestId,
       }),
       {
         status: 500,

@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createLogger } from "../_shared/observability.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,6 +12,8 @@ serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
+
+  const logger = createLogger("auth-signout", req);
 
   try {
     // Get access token from cookie
@@ -30,12 +33,25 @@ serve(async (req) => {
       });
 
       // Sign out from Supabase
-      await supabase.auth.signOut();
+      const { error: signOutError } = await logger.withTiming(
+        () => supabase.auth.signOut(),
+        "signOut"
+      );
+
+      if (signOutError) {
+        logger.logWarn("Supabase sign out failed, but clearing cookies anyway", {
+          error: signOutError.message,
+        });
+      }
+    } else {
+      logger.logInfo("No access token found, clearing cookies only");
     }
 
     // Clear cookies
     const clearAccessToken = "sb-access-token=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0";
     const clearRefreshToken = "sb-refresh-token=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0";
+
+    logger.logInfo("Sign out successful");
 
     if (Deno.env.get("ENVIRONMENT") === "production") {
       // In production, we need to set Secure flag when clearing
@@ -64,9 +80,13 @@ serve(async (req) => {
       }
     );
   } catch (error) {
+    logger.logError(error, {
+      operation: "auth-signout",
+    });
     return new Response(
       JSON.stringify({
         error: error instanceof Error ? error.message : "Internal server error",
+        requestId: logger.requestId,
       }),
       {
         status: 500,
