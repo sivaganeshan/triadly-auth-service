@@ -1,0 +1,31 @@
+{
+  "name": "triadly-auth-service",
+  "version": "1.0.0",
+  "description": "Backend auth service using Supabase Edge Functions with httpOnly cookies",
+  "scripts": {
+    "deploy": "supabase functions deploy",
+    "deploy:signin": "supabase functions deploy auth-signin",
+    "deploy:signup": "supabase functions deploy auth-signup",
+    "deploy:oauth": "supabase functions deploy auth-oauth",
+    "deploy:callback": "supabase functions deploy auth-callback",
+    "deploy:signout": "supabase functions deploy auth-signout",
+    "deploy:session": "supabase functions deploy auth-session",
+    "logs": "supabase functions logs",
+    "logs:signin": "supabase functions logs auth-signin",
+    "logs:signup": "supabase functions logs auth-signup",
+    "logs:oauth": "supabase functions logs auth-oauth",
+    "logs:callback": "supabase functions logs auth-callback",
+    "logs:signout": "supabase functions logs auth-signout",
+    "logs:session": "supabase functions logs auth-session"
+  },
+  "keywords": [
+    "supabase",
+    "authentication",
+    "edge-functions",
+    "cookies",
+    "security"
+  ],
+  "author": "",
+  "license": "MIT"
+}
+
