@@ -1,0 +1,28 @@
+# Supabase Edge Functions Configuration
+
+[project]
+# Your Supabase project reference ID
+# Get this from: https://app.supabase.com/project/_/settings/general
+
+[functions]
+# Global settings for all Edge Functions
+# Individual function configs can override these
+
+[functions.auth-signin]
+# Sign in endpoint configuration
+
+[functions.auth-signup]
+# Sign up endpoint configuration
+
+[functions.auth-oauth]
+# OAuth initiation endpoint configuration
+
+[functions.auth-callback]
+# OAuth callback endpoint configuration
+
+[functions.auth-signout]
+# Sign out endpoint configuration
+
+[functions.auth-session]
+# Session retrieval endpoint configuration
+
