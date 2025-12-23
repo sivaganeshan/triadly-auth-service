@@ -10,6 +10,9 @@
     "deploy:callback": "supabase functions deploy auth-callback",
     "deploy:signout": "supabase functions deploy auth-signout",
     "deploy:session": "supabase functions deploy auth-session",
+    "migrations:deploy": "supabase db push",
+    "migrations:status": "supabase migration list",
+    "migrations:reset": "supabase db reset",
     "logs": "supabase functions logs",
     "logs:signin": "supabase functions logs auth-signin",
     "logs:signup": "supabase functions logs auth-signup",
@@ -26,6 +29,8 @@
     "security"
   ],
   "author": "",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "supabase": "^2.67.3"
+  }
 }
-
